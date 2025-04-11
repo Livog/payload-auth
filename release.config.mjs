@@ -1,6 +1,6 @@
 const typeMapping = {
   feat: "🚀 Features",
-  fix: "🐛 Bugs",
+  fix: "🐛 Bug Fixes",
   chore: "🏠 Chores",
   docs: "📚 Documentation",
   style: "💅 Styles",
@@ -15,15 +15,16 @@ const typeMapping = {
 
 const GITHUB_API_HOST = "https://api.github.com"
 
-// Returns a promise that enriches commit author info using GitHub's API.
-// The cache is keyed by email so we don't query twice for the same contributor.
+// Enrich commit author data by retrieving the GitHub login via the API,
+// using the commit author’s email to key a cache. If the commit author is an object,
+// we use its name (if available) and then append " (@login)"; if no name exists, we just append
+// "(@login)" without leaking the email.
 async function enrichCommitAuthors(context, headers, owner, repository) {
   const emailCache = new Map()
   await Promise.all(
     context.commitGroups.map(async group => {
       await Promise.all(
         group.commits.map(async commit => {
-          // If there's no author or no raw author email, nothing to do.
           if (
             !commit.author ||
             !commit.raw ||
@@ -33,34 +34,42 @@ async function enrichCommitAuthors(context, headers, owner, repository) {
             return
 
           const email = commit.raw.author.email.toLowerCase()
-
-          // Skip if already enriched (contains "(@").
-          if (typeof commit.author === "string" && commit.author.includes("(@")) {
-            return
+          let originalName = ""
+          // If commit.author is an object, use its name only.
+          if (typeof commit.author === "object") {
+            originalName = commit.author.name || ""
+          } else if (typeof commit.author === "string") {
+            originalName = commit.author
           }
+          // Skip enrichment if already enriched.
+          if (originalName && originalName.includes("(@")) return
 
           if (emailCache.has(email)) {
             const login = emailCache.get(email)
-            if (login) commit.author = `${commit.author} (@${login})`
+            if (login) {
+              commit.author = originalName
+                ? `${originalName} (@${login})`
+                : `(@${login})`
+            }
           } else {
             try {
-              // Use GITHUB_API_HOST to fetch from GitHub's API.
               const res = await fetch(
                 `${GITHUB_API_HOST}/repos/${owner}/${repository}/commits/${commit.raw.hash}`,
                 { headers }
               )
-              console.log("Res:", res)
               if (res.ok) {
                 const data = await res.json()
-                console.log("Data:", data)
                 const login = data.author && data.author.login ? data.author.login : null
                 emailCache.set(email, login)
                 if (login) {
-                  commit.author = `${commit.author} (@${login})`
+                  commit.author = originalName
+                    ? `${originalName} (@${login})`
+                    : `(@${login})`
                 }
               } else {
-                // Log the error details if not successful.
-                console.error(`Failed to fetch commit ${commit.raw.hash}: ${res.status} ${res.statusText}`)
+                console.error(
+                  `Failed to fetch commit ${commit.raw.hash}: ${res.status} ${res.statusText}`
+                )
                 emailCache.set(email, null)
               }
             } catch (error) {
@@ -102,18 +111,13 @@ function buildContributorSection(context) {
   return contributorSection
 }
 
-// This asynchronous finalizeContext returns a promise (which is acceptable).
+// Asynchronous finalizeContext returns a promise.
 async function finalizeContext(context) {
   if (!context.commitGroups) return context
 
-  console.log("Before transformation:", JSON.stringify(context, null, 2))
-  console.log("Commit groups:", JSON.stringify(context.commitGroups, null, 2))
-
   updateCommitGroupTitles(context, typeMapping)
 
-  // Use the owner and repository provided in context.
   const { owner, repository } = context
-  // Configure API request headers.
   const headers = { "Accept": "application/vnd.github.v3+json" }
   if (process.env.GITHUB_TOKEN) {
     headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`
@@ -124,7 +128,6 @@ async function finalizeContext(context) {
   const contributorSection = buildContributorSection(context)
   context.commitGroups.push(contributorSection)
 
-  console.log("Final context:", JSON.stringify(context, null, 2))
   return context
 }
 
@@ -149,18 +152,14 @@ const config = {
           { type: "fix", release: "patch" },
           { breaking: true, release: "major" }
         ],
-        parserOpts: {
-          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
-        }
+        parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] }
       }
     ],
     [
       "@semantic-release/release-notes-generator",
       {
         preset: "angular",
-        parserOpts: {
-          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
-        },
+        parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] },
         writerOpts: {
           commitsSort: ["subject", "scope"],
           types: Object.entries(typeMapping).map(([type, section]) => ({
@@ -202,9 +201,7 @@ const config = {
     ],
     [
       "@semantic-release/npm",
-      {
-        pkgRoot: "./packages/payload-auth"
-      }
+      { pkgRoot: "./packages/payload-auth" }
     ]
   ]
 }
