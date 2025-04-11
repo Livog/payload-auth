@@ -32,7 +32,6 @@ const config = {
           noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
         },
         writerOpts: {
-          // Commit groups will only print the commit subject and hash details
           commitsSort: ["subject", "scope"],
           types: [
             { type: "feat", section: "🚀 Features" },
@@ -51,13 +50,13 @@ const config = {
           commitGroupsSort: "title",
           commitPartial:
             "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
-            "{{#if hash}}[{{shortHash}}]({{commitUrl}}){{/if}}" +
             "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n",
           groupBy: "type",
           finalizeContext: function (context) {
             if (!context.commitGroups) return context
 
             context.commitGroups.forEach(group => {
+              if (group.title === "Bug Fixes") group.title = "🐛 Bugs"
               group.commits.forEach(commit => {
                 if (!commit.author) return
                 if (typeof commit.author === "object") {
@@ -76,6 +75,7 @@ const config = {
                 contributors.add(commit.author)
               })
             })
+
             if (!contributors.size) return context
             contributors.forEach(contributor => {
               contributorSection.commits.push({ subject: contributor, hash: "" })
