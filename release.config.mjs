@@ -7,79 +7,74 @@ const config = {
     [
       "@semantic-release/commit-analyzer",
       {
-        "preset": "angular",
-        "releaseRules": [
-          {"type": "docs", "scope": "README", "release": "patch"},
-          {"type": "docs", "release": "patch"},
-          {"type": "chore", "release": "patch"},
-          {"type": "examples", "release": "patch"},
-          {"type": "perf", "release": "patch"},
-          {"type": "ui", "release": "patch"},
-          {"type": "feat", "release": "minor"},
-          {"type": "fix", "release": "patch"},
-          {"breaking": true, "release": "major"}
+        preset: "angular",
+        releaseRules: [
+          { type: "docs", scope: "README", release: "patch" },
+          { type: "docs", release: "patch" },
+          { type: "chore", release: "patch" },
+          { type: "examples", release: "patch" },
+          { type: "perf", release: "patch" },
+          { type: "ui", release: "patch" },
+          { type: "feat", release: "minor" },
+          { type: "fix", release: "patch" },
+          { breaking: true, release: "major" }
         ],
-        "parserOpts": {
-          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+        parserOpts: {
+          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
         }
       }
     ],
     [
       "@semantic-release/release-notes-generator",
       {
-        "preset": "angular",
-        "parserOpts": {
-          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+        preset: "angular",
+        parserOpts: {
+          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
         },
-        "writerOpts": {
-          "commitsSort": ["subject", "scope"],
-          "types": [
-            {"type": "feat", "section": ":rocket: Features"},
-            {"type": "fix", "section": ":bug: Bug Fixes"},
-            {"type": "chore", "section": ":house: Chores"},
-            {"type": "docs", "section": ":books: Documentation"},
-            {"type": "style", "section": ":nail_care: Styles"},
-            {"type": "refactor", "section": ":recycle: Code Refactoring"},
-            {"type": "perf", "section": ":zap: Performance Improvements"},
-            {"type": "test", "section": ":test_tube: Tests"},
-            {"type": "build", "section": ":package: Build System"},
-            {"type": "ci", "section": ":gear: CI"},
-            {"type": "examples", "section": ":memo: Examples"},
-            {"type": "ui", "section": ":art: UI Changes"}
+        writerOpts: {
+          commitsSort: ["subject", "scope"],
+          types: [
+            { type: "feat", section: "🚀 Features" },
+            { type: "fix", section: "🐛 Bug Fixes" },
+            { type: "chore", section: "🏠 Chores" },
+            { type: "docs", section: "📚 Documentation" },
+            { type: "style", section: "💅 Styles" },
+            { type: "refactor", section: "♻️ Code Refactoring" },
+            { type: "perf", section: "⚡ Performance Improvements" },
+            { type: "test", section: "🧪 Tests" },
+            { type: "build", section: "📦 Build System" },
+            { type: "ci", section: "⚙️ CI" },
+            { type: "examples", section: "📝 Examples" },
+            { type: "ui", section: "🎨 UI Changes" }
           ],
-          "commitGroupsSort": "title",
-          "commitPartial": "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n{{~!-- commit link --}} {{#if hash}}[{{shortHash}}]({{commitUrl}}){{/if}} {{~!-- commit references --}}{{#if references}}, closes{{~#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n{{~!-- author --}}{{#if author}}*{{author}}*{{/if}}",
-          "groupBy": "type",
-          "finalizeContext": function(context) {
-            if (context.commitGroups) {
-              const contributorSection = {
-                title: ":busts_in_silhouette: Contributors",
-                commits: []
-              };
-              
-              // Get unique contributors from all commits
-              const contributors = new Set();
-              context.commitGroups.forEach(group => {
-                group.commits.forEach(commit => {
-                  if (commit.author) {
-                    contributors.add(commit.author);
-                  }
-                });
-              });
-              
-              // Add contributor list to the section
-              contributors.forEach(contributor => {
-                contributorSection.commits.push({
-                  subject: contributor,
-                  hash: ""
-                });
-              });
-              
-              if (contributors.size > 0) {
-                context.commitGroups.push(contributorSection);
-              }
-            }
-            return context;
+          commitGroupsSort: "title",
+          commitPartial:
+            "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
+            "{{#if hash}}[{{shortHash}}]({{commitUrl}}){{/if}}" +
+            "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n" +
+            "{{#if author}}*{{author}}*{{/if}}",
+          groupBy: "type",
+          finalizeContext: function (context) {
+            if (!context.commitGroups) return context
+            const contributorSection = { title: "👥 Contributors", commits: [] }
+            const contributors = new Set()
+            context.commitGroups.forEach(group => {
+              group.commits.forEach(commit => {
+                if (!commit.author) return
+                const author =
+                  typeof commit.author === "object"
+                    ? commit.author.name || commit.author.email || ""
+                    : commit.author
+                if (!author) return
+                contributors.add(author)
+              })
+            })
+            if (!contributors.size) return context
+            contributors.forEach(contributor => {
+              contributorSection.commits.push({ subject: contributor, hash: "" })
+            })
+            context.commitGroups.push(contributorSection)
+            return context
           }
         }
       }
@@ -117,6 +112,6 @@ const config = {
       }
     ]
   ]
-};
+}
 
-export default config; 
+export default config
