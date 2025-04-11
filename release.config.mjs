@@ -1,6 +1,6 @@
 const typeMapping = {
   feat: "🚀 Features",
-  fix: "🐛 Bug Fixes",
+  fix: "🐛 Bugs",
   chore: "🏠 Chores",
   docs: "📚 Documentation",
   style: "💅 Styles",
@@ -15,12 +15,18 @@ const typeMapping = {
 
 const GITHUB_API_HOST = "https://api.github.com"
 
+// A simple transform that returns all commits without filtering.
+function transformCommit(commit) {
+  // Return the commit unchanged so that even chore commits are kept.
+  return commit;
+}
+
 // Enrich commit author data by retrieving the GitHub login via the API,
-// using the commit author’s email to key a cache. If the commit author is an object,
-// we use its name (if available) and then append " (@login)"; if no name exists, we just append
-// "(@login)" without leaking the email.
+// using the commit author’s email as the key. If commit.author is an object,
+// we use only its name (if available) and then append " (@login)"; if no name exists,
+// we only append the GitHub username without exposing the email.
 async function enrichCommitAuthors(context, headers, owner, repository) {
-  const emailCache = new Map()
+  const emailCache = new Map();
   await Promise.all(
     context.commitGroups.map(async group => {
       await Promise.all(
@@ -30,57 +36,51 @@ async function enrichCommitAuthors(context, headers, owner, repository) {
             !commit.raw ||
             !commit.raw.author ||
             !commit.raw.author.email
-          )
-            return
+          ) return;
 
-          const email = commit.raw.author.email.toLowerCase()
-          let originalName = ""
-          // If commit.author is an object, use its name only.
+          const email = commit.raw.author.email.toLowerCase();
+
+          // Determine the original name (if provided) without falling back to email.
+          let originalName = "";
           if (typeof commit.author === "object") {
-            originalName = commit.author.name || ""
+            originalName = commit.author.name || "";
           } else if (typeof commit.author === "string") {
-            originalName = commit.author
+            originalName = commit.author;
           }
-          // Skip enrichment if already enriched.
-          if (originalName && originalName.includes("(@")) return
+          // If already enriched, skip.
+          if (originalName && originalName.includes("(@")) return;
 
           if (emailCache.has(email)) {
-            const login = emailCache.get(email)
+            const login = emailCache.get(email);
             if (login) {
-              commit.author = originalName
-                ? `${originalName} (@${login})`
-                : `(@${login})`
+              commit.author = originalName ? `${originalName} (@${login})` : `(@${login})`;
             }
           } else {
             try {
               const res = await fetch(
                 `${GITHUB_API_HOST}/repos/${owner}/${repository}/commits/${commit.raw.hash}`,
                 { headers }
-              )
+              );
               if (res.ok) {
-                const data = await res.json()
-                const login = data.author && data.author.login ? data.author.login : null
-                emailCache.set(email, login)
+                const data = await res.json();
+                const login = data.author && data.author.login ? data.author.login : null;
+                emailCache.set(email, login);
                 if (login) {
-                  commit.author = originalName
-                    ? `${originalName} (@${login})`
-                    : `(@${login})`
+                  commit.author = originalName ? `${originalName} (@${login})` : `(@${login})`;
                 }
               } else {
-                console.error(
-                  `Failed to fetch commit ${commit.raw.hash}: ${res.status} ${res.statusText}`
-                )
-                emailCache.set(email, null)
+                console.error(`Failed to fetch commit ${commit.raw.hash}: ${res.status} ${res.statusText}`);
+                emailCache.set(email, null);
               }
             } catch (error) {
-              console.error(`Error fetching commit for email ${email}:`, error)
-              emailCache.set(email, null)
+              console.error(`Error fetching commit for email ${email}:`, error);
+              emailCache.set(email, null);
             }
           }
         })
-      )
+      );
     })
-  )
+  );
 }
 
 function updateCommitGroupTitles(context, typeMapping) {
@@ -89,46 +89,50 @@ function updateCommitGroupTitles(context, typeMapping) {
       const rawType =
         group.commits[0].raw && group.commits[0].raw.type
           ? group.commits[0].raw.type.toLowerCase()
-          : group.commits[0].type.toLowerCase()
+          : group.commits[0].type.toLowerCase();
       if (typeMapping[rawType]) {
-        group.title = typeMapping[rawType]
+        group.title = typeMapping[rawType];
       }
     }
-  })
+  });
 }
 
 function buildContributorSection(context) {
-  const contributors = new Set()
+  const contributors = new Set();
   context.commitGroups.forEach(group => {
     group.commits.forEach(commit => {
-      if (commit.author) contributors.add(commit.author)
-    })
-  })
-  const contributorSection = { title: "🤝 Contributors", commits: [] }
+      if (commit.author) contributors.add(commit.author);
+    });
+  });
+  const contributorSection = { title: "🤝 Contributors", commits: [] };
   contributors.forEach(contributor => {
-    contributorSection.commits.push({ subject: contributor, hash: "" })
-  })
-  return contributorSection
+    contributorSection.commits.push({ subject: contributor, hash: "" });
+  });
+  return contributorSection;
 }
 
+// The asynchronous finalizeContext returns a promise (which is supported).
 async function finalizeContext(context) {
-  if (!context.commitGroups) return context
-  console.log("Context:", context)
+  if (!context.commitGroups) return context;
 
-  updateCommitGroupTitles(context, typeMapping)
+  console.log("Before transformation:", JSON.stringify(context, null, 2));
+  console.log("Commit groups:", JSON.stringify(context.commitGroups, null, 2));
 
-  const { owner, repository } = context
-  const headers = { "Accept": "application/vnd.github.v3+json" }
+  updateCommitGroupTitles(context, typeMapping);
+
+  const { owner, repository } = context;
+  const headers = { "Accept": "application/vnd.github.v3+json" };
   if (process.env.GITHUB_TOKEN) {
-    headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`
+    headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`;
   }
 
-  await enrichCommitAuthors(context, headers, owner, repository)
+  await enrichCommitAuthors(context, headers, owner, repository);
+  
+  const contributorSection = buildContributorSection(context);
+  context.commitGroups.push(contributorSection);
 
-  const contributorSection = buildContributorSection(context)
-  context.commitGroups.push(contributorSection)
-
-  return context
+  console.log("Final context:", JSON.stringify(context, null, 2));
+  return context;
 }
 
 /**
@@ -162,15 +166,14 @@ const config = {
         parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] },
         writerOpts: {
           commitsSort: ["subject", "scope"],
-          types: Object.entries(typeMapping).map(([type, section]) => ({
-            type,
-            section
-          })),
+          types: Object.entries(typeMapping).map(([type, section]) => ({ type, section })),
           commitGroupsSort: "title",
+          // commitPartial remains unchanged.
           commitPartial:
             "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
             "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n",
           groupBy: "type",
+          transform: transformCommit,
           finalizeContext
         }
       }
@@ -195,8 +198,7 @@ const config = {
       "@semantic-release/git",
       {
         assets: ["package.json"],
-        message:
-          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],
     [
@@ -204,6 +206,6 @@ const config = {
       { pkgRoot: "./packages/payload-auth" }
     ]
   ]
-}
+};
 
-export default config
+export default config;
