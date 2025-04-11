@@ -34,19 +34,54 @@ const config = {
         "writerOpts": {
           "commitsSort": ["subject", "scope"],
           "types": [
-            {"type": "feat", "section": "🚀 Features"},
-            {"type": "fix", "section": "🐛 Bug Fixes"},
-            {"type": "chore", "section": "🏡 Chores"},
-            {"type": "docs", "section": "📚 Documentation"},
-            {"type": "style", "section": "💅 Styles"},
-            {"type": "refactor", "section": "♻️ Code Refactoring"},
-            {"type": "perf", "section": "⚡ Performance Improvements"},
-            {"type": "test", "section": "🧪 Tests"},
-            {"type": "build", "section": "📦 Build System"},
-            {"type": "ci", "section": "⚙️ CI"},
-            {"type": "examples", "section": "📝 Examples"},
-            {"type": "ui", "section": "🎨 UI Changes"}
-          ]
+            {"type": "feat", "section": ":rocket: Features"},
+            {"type": "fix", "section": ":bug: Bug Fixes"},
+            {"type": "chore", "section": ":house: Chores"},
+            {"type": "docs", "section": ":books: Documentation"},
+            {"type": "style", "section": ":nail_care: Styles"},
+            {"type": "refactor", "section": ":recycle: Code Refactoring"},
+            {"type": "perf", "section": ":zap: Performance Improvements"},
+            {"type": "test", "section": ":test_tube: Tests"},
+            {"type": "build", "section": ":package: Build System"},
+            {"type": "ci", "section": ":gear: CI"},
+            {"type": "examples", "section": ":memo: Examples"},
+            {"type": "ui", "section": ":art: UI Changes"}
+          ],
+          "commitGroupsSort": "title",
+          "commitPartial": "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n{{~!-- commit link --}} {{#if hash}}[{{shortHash}}]({{commitUrl}}){{/if}} {{~!-- commit references --}}{{#if references}}, closes{{~#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n{{~!-- author --}}{{#if author}}*{{author}}*{{/if}}",
+          "groupBy": "type",
+          "finalizeContext": function(context) {
+            if (context.commitGroups) {
+              const contributorSection = {
+                title: ":busts_in_silhouette: Contributors",
+                commits: []
+              };
+              
+              // Get unique contributors from all commits
+              const contributors = new Set();
+              context.commitGroups.forEach(group => {
+                group.commits.forEach(commit => {
+                  if (commit.author) {
+                    contributors.add(commit.author);
+                  }
+                });
+              });
+              
+              // Add contributor list to the section
+              contributors.forEach(contributor => {
+                contributorSection.commits.push({
+                  subject: contributor,
+                  hash: ""
+                });
+              });
+              
+              // Add contributor section if there are contributors
+              if (contributors.size > 0) {
+                context.commitGroups.push(contributorSection);
+              }
+            }
+            return context;
+          }
         }
       }
     ],
@@ -60,10 +95,10 @@ const config = {
           }
         ],
         addReleases: "bottom",
-        successComment: ":tada: This release is now available as \`${nextRelease.version}\` :tada:",
+        successComment: ":tada: This release is now available as `${nextRelease.version}` :tada:",
         failTitle: "The release workflow has failed",
         failComment: "The release workflow has failed. Please check the logs for more information.",
-        releaseNameTemplate: "Release ${nextRelease.version}",
+        releaseNameTemplate: "v${nextRelease.version}",
         releasedLabels: ["released"],
         addBranchProtectionRules: false,
         githubAssets: false
