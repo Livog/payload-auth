@@ -111,7 +111,6 @@ function buildContributorSection(context) {
   return contributorSection
 }
 
-// Asynchronous finalizeContext returns a promise.
 async function finalizeContext(context) {
   if (!context.commitGroups) return context
 
