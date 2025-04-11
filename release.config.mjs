@@ -106,6 +106,7 @@ const config = {
                         )
                         if (res.ok) {
                           const data = await res.json()
+                          console.log("Data:", data)
                           const login = data.author && data.author.login ? data.author.login : null
                           emailCache.set(email, login)
                           if (login) {
