@@ -58,6 +58,7 @@ const config = {
             if (!context.commitGroups) return context
 
             console.log("Before transformation:", context)
+            console.log("Commit groups:", context.commitGroups)
 
             // Update each commit group title using the DRY typeMapping
             context.commitGroups.forEach(group => {
