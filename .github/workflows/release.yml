@@ -6,8 +6,22 @@ on:
       - main # Trigger on pushes to the main branch
 
 jobs:
+  commitlint:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@v6
+
   publish:
     name: Publish Release
+    needs: commitlint
     runs-on: ubuntu-latest
     permissions:
       contents: write # Needed by semantic-release to create releases, push tags/commits
