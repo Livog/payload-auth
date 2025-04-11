@@ -32,6 +32,7 @@ const config = {
           noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
         },
         writerOpts: {
+          // Commit groups will only print the commit subject and hash details
           commitsSort: ["subject", "scope"],
           types: [
             { type: "feat", section: "🚀 Features" },
@@ -51,8 +52,7 @@ const config = {
           commitPartial:
             "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
             "{{#if hash}}[{{shortHash}}]({{commitUrl}}){{/if}}" +
-            "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n" +
-            "{{#if author}}*{{author}}*{{/if}}",
+            "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n",
           groupBy: "type",
           finalizeContext: function (context) {
             if (!context.commitGroups) return context
@@ -61,8 +61,8 @@ const config = {
               group.commits.forEach(commit => {
                 if (!commit.author) return
                 if (typeof commit.author === "object") {
-                  commit.author = commit.author.username
-                    ? `${commit.author.name} (@${commit.author.username})`
+                  commit.author = commit.author.login
+                    ? `${commit.author.name} (@${commit.author.login})`
                     : commit.author.name || commit.author.email || ""
                 }
               })
@@ -106,8 +106,7 @@ const config = {
       "@semantic-release/git",
       {
         assets: ["package.json"],
-        message:
-          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],
     [
