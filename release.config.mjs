@@ -1,3 +1,18 @@
+const typeMapping = {
+  feat: "🚀 Features",
+  fix: "🐛 Bugs",
+  chore: "🏠 Chores",
+  docs: "📚 Documentation",
+  style: "💅 Styles",
+  refactor: "♻️ Code Refactoring",
+  perf: "⚡ Performance Improvements",
+  test: "🧪 Tests",
+  build: "📦 Build System",
+  ci: "⚙️ CI",
+  examples: "📝 Examples",
+  ui: "🎨 UI Changes"
+}
+
 /**
  * @type {import('semantic-release').GlobalConfig}
  */
@@ -33,20 +48,7 @@ const config = {
         },
         writerOpts: {
           commitsSort: ["subject", "scope"],
-          types: [
-            { type: "feat", section: "🚀 Features" },
-            { type: "fix", section: "🐛 Bug Fixes" },
-            { type: "chore", section: "🏠 Chores" },
-            { type: "docs", section: "📚 Documentation" },
-            { type: "style", section: "💅 Styles" },
-            { type: "refactor", section: "♻️ Code Refactoring" },
-            { type: "perf", section: "⚡ Performance Improvements" },
-            { type: "test", section: "🧪 Tests" },
-            { type: "build", section: "📦 Build System" },
-            { type: "ci", section: "⚙️ CI" },
-            { type: "examples", section: "📝 Examples" },
-            { type: "ui", section: "🎨 UI Changes" }
-          ],
+          types: Object.entries(typeMapping).map(([type, section]) => ({ type, section })),
           commitGroupsSort: "title",
           commitPartial:
             "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
@@ -55,8 +57,14 @@ const config = {
           finalizeContext: function (context) {
             if (!context.commitGroups) return context
 
+            console.log("Before transformation:", JSON.stringify(context.commitGroups, null, 2))
+
+            // Update each commit group title using the DRY typeMapping
             context.commitGroups.forEach(group => {
-              if (group.title === "Bug Fixes") group.title = "🐛 Bugs"
+              if (group.commits && group.commits.length > 0 && group.commits[0].type) {
+                const commitType = group.commits[0].type
+                if (typeMapping[commitType]) group.title = typeMapping[commitType]
+              }
               group.commits.forEach(commit => {
                 if (!commit.author) return
                 if (typeof commit.author === "object") {
@@ -67,7 +75,7 @@ const config = {
               })
             })
 
-            const contributorSection = { title: "🤝 Contributors", commits: [] }
+            // Gather unique contributors
             const contributors = new Set()
             context.commitGroups.forEach(group => {
               group.commits.forEach(commit => {
@@ -75,12 +83,16 @@ const config = {
                 contributors.add(commit.author)
               })
             })
+            console.log("Contributors found:", Array.from(contributors))
 
-            if (!contributors.size) return context
+            // Create and add the contributors section
+            const contributorSection = { title: "🤝 Contributors", commits: [] }
             contributors.forEach(contributor => {
               contributorSection.commits.push({ subject: contributor, hash: "" })
             })
             context.commitGroups.push(contributorSection)
+
+            console.log("Final context:", JSON.stringify(context, null, 2))
             return context
           }
         }
@@ -106,7 +118,8 @@ const config = {
       "@semantic-release/git",
       {
         assets: ["package.json"],
-        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        message:
+          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],
     [
