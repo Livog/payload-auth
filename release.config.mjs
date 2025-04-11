@@ -104,6 +104,7 @@ const config = {
                           `${host}/repos/${owner}/${repository}/commits/${commit.raw.hash}`,
                           { headers }
                         )
+                        console.log("Res:", res)
                         if (res.ok) {
                           const data = await res.json()
                           console.log("Data:", data)
