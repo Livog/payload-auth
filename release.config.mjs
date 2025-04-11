@@ -75,7 +75,6 @@ const config = {
                 });
               });
               
-              // Add contributor section if there are contributors
               if (contributors.size > 0) {
                 context.commitGroups.push(contributorSection);
               }
