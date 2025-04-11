@@ -56,17 +56,24 @@ const config = {
           groupBy: "type",
           finalizeContext: function (context) {
             if (!context.commitGroups) return context
-            const contributorSection = { title: "👥 Contributors", commits: [] }
+
+            context.commitGroups.forEach(group => {
+              group.commits.forEach(commit => {
+                if (!commit.author) return
+                if (typeof commit.author === "object") {
+                  commit.author = commit.author.username
+                    ? `${commit.author.name} (@${commit.author.username})`
+                    : commit.author.name || commit.author.email || ""
+                }
+              })
+            })
+
+            const contributorSection = { title: "🤝 Contributors", commits: [] }
             const contributors = new Set()
             context.commitGroups.forEach(group => {
               group.commits.forEach(commit => {
                 if (!commit.author) return
-                const author =
-                  typeof commit.author === "object"
-                    ? commit.author.name || commit.author.email || ""
-                    : commit.author
-                if (!author) return
-                contributors.add(author)
+                contributors.add(commit.author)
               })
             })
             if (!contributors.size) return context
@@ -83,10 +90,7 @@ const config = {
       "@semantic-release/github",
       {
         assets: [
-          {
-            path: "payload-auth-distribution.zip",
-            label: "Distribution (zip)"
-          }
+          { path: "payload-auth-distribution.zip", label: "Distribution (zip)" }
         ],
         addReleases: "bottom",
         successComment: ":tada: This release is now available as `${nextRelease.version}` :tada:",
@@ -102,7 +106,8 @@ const config = {
       "@semantic-release/git",
       {
         assets: ["package.json"],
-        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        message:
+          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],
     [
