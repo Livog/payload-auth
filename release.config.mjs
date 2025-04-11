@@ -13,6 +13,121 @@ const typeMapping = {
   ui: "🎨 UI Changes"
 }
 
+const GITHUB_API_HOST = "https://api.github.com"
+
+// Returns a promise that enriches commit author info using GitHub's API.
+// The cache is keyed by email so we don't query twice for the same contributor.
+async function enrichCommitAuthors(context, headers, owner, repository) {
+  const emailCache = new Map()
+  await Promise.all(
+    context.commitGroups.map(async group => {
+      await Promise.all(
+        group.commits.map(async commit => {
+          // If there's no author or no raw author email, nothing to do.
+          if (
+            !commit.author ||
+            !commit.raw ||
+            !commit.raw.author ||
+            !commit.raw.author.email
+          )
+            return
+
+          const email = commit.raw.author.email.toLowerCase()
+
+          // Skip if already enriched (contains "(@").
+          if (typeof commit.author === "string" && commit.author.includes("(@")) {
+            return
+          }
+
+          if (emailCache.has(email)) {
+            const login = emailCache.get(email)
+            if (login) commit.author = `${commit.author} (@${login})`
+          } else {
+            try {
+              // Use GITHUB_API_HOST to fetch from GitHub's API.
+              const res = await fetch(
+                `${GITHUB_API_HOST}/repos/${owner}/${repository}/commits/${commit.raw.hash}`,
+                { headers }
+              )
+              console.log("Res:", res)
+              if (res.ok) {
+                const data = await res.json()
+                console.log("Data:", data)
+                const login = data.author && data.author.login ? data.author.login : null
+                emailCache.set(email, login)
+                if (login) {
+                  commit.author = `${commit.author} (@${login})`
+                }
+              } else {
+                // Log the error details if not successful.
+                console.error(`Failed to fetch commit ${commit.raw.hash}: ${res.status} ${res.statusText}`)
+                emailCache.set(email, null)
+              }
+            } catch (error) {
+              console.error(`Error fetching commit for email ${email}:`, error)
+              emailCache.set(email, null)
+            }
+          }
+        })
+      )
+    })
+  )
+}
+
+function updateCommitGroupTitles(context, typeMapping) {
+  context.commitGroups.forEach(group => {
+    if (group.commits && group.commits.length > 0) {
+      const rawType =
+        group.commits[0].raw && group.commits[0].raw.type
+          ? group.commits[0].raw.type.toLowerCase()
+          : group.commits[0].type.toLowerCase()
+      if (typeMapping[rawType]) {
+        group.title = typeMapping[rawType]
+      }
+    }
+  })
+}
+
+function buildContributorSection(context) {
+  const contributors = new Set()
+  context.commitGroups.forEach(group => {
+    group.commits.forEach(commit => {
+      if (commit.author) contributors.add(commit.author)
+    })
+  })
+  const contributorSection = { title: "🤝 Contributors", commits: [] }
+  contributors.forEach(contributor => {
+    contributorSection.commits.push({ subject: contributor, hash: "" })
+  })
+  return contributorSection
+}
+
+// This asynchronous finalizeContext returns a promise (which is acceptable).
+async function finalizeContext(context) {
+  if (!context.commitGroups) return context
+
+  console.log("Before transformation:", JSON.stringify(context, null, 2))
+  console.log("Commit groups:", JSON.stringify(context.commitGroups, null, 2))
+
+  updateCommitGroupTitles(context, typeMapping)
+
+  // Use the owner and repository provided in context.
+  const { owner, repository } = context
+  // Configure API request headers.
+  const headers = { "Accept": "application/vnd.github.v3+json" }
+  if (process.env.GITHUB_TOKEN) {
+    headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`
+  }
+
+  await enrichCommitAuthors(context, headers, owner, repository)
+
+  const contributorSection = buildContributorSection(context)
+  context.commitGroups.push(contributorSection)
+
+  console.log("Final context:", JSON.stringify(context, null, 2))
+  return context
+}
+
 /**
  * @type {import('semantic-release').GlobalConfig}
  */
@@ -34,14 +149,18 @@ const config = {
           { type: "fix", release: "patch" },
           { breaking: true, release: "major" }
         ],
-        parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] }
+        parserOpts: {
+          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
+        }
       }
     ],
     [
       "@semantic-release/release-notes-generator",
       {
         preset: "angular",
-        parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] },
+        parserOpts: {
+          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
+        },
         writerOpts: {
           commitsSort: ["subject", "scope"],
           types: Object.entries(typeMapping).map(([type, section]) => ({
@@ -53,100 +172,7 @@ const config = {
             "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
             "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n",
           groupBy: "type",
-          finalizeContext: async function (context) {
-            if (!context.commitGroups) return context
-
-            console.log("Before transformation:", JSON.stringify(context, null, 2))
-            console.log("Commit groups:", JSON.stringify(context.commitGroups, null, 2))
-
-            // Set group titles based on raw commit type.
-            context.commitGroups.forEach(group => {
-              if (group.commits && group.commits.length > 0) {
-                const rawType =
-                  group.commits[0].raw && group.commits[0].raw.type
-                    ? group.commits[0].raw.type.toLowerCase()
-                    : group.commits[0].type.toLowerCase()
-                if (typeMapping[rawType]) {
-                  group.title = typeMapping[rawType]
-                }
-              }
-            })
-
-            // Prepare to enrich commit author data using GitHub API.
-            const { host, owner, repository } = context
-            const headers = { "Accept": "application/vnd.github.v3+json" }
-            if (process.env.GITHUB_TOKEN) {
-              headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`
-            }
-
-            // Use a cache keyed by email for efficiency.
-            const emailCache = new Map()
-            await Promise.all(
-              context.commitGroups.map(async group => {
-                await Promise.all(
-                  group.commits.map(async commit => {
-                    // If there's no author or no raw author email, skip.
-                    if (!commit.author || !commit.raw || !commit.raw.author || !commit.raw.author.email) {
-                      return
-                    }
-                    // Use email as the key.
-                    const email = commit.raw.author.email.toLowerCase()
-                    // Skip if author was already enriched (i.e. contains "(@" substring).
-                    if (typeof commit.author === "string" && commit.author.includes("(@")) {
-                      return
-                    }
-                    if (emailCache.has(email)) {
-                      const login = emailCache.get(email)
-                      if (login) commit.author = `${commit.author} (@${login})`
-                    } else {
-                      try {
-                        const res = await fetch(
-                          `${host}/repos/${owner}/${repository}/commits/${commit.raw.hash}`,
-                          { headers }
-                        )
-                        console.log("Res:", res)
-                        if (res.ok) {
-                          const data = await res.json()
-                          console.log("Data:", data)
-                          const login = data.author && data.author.login ? data.author.login : null
-                          emailCache.set(email, login)
-                          if (login) {
-                            commit.author = `${commit.author} (@${login})`
-                          }
-                        } else {
-                          emailCache.set(email, null)
-                        }
-                      } catch (error) {
-                        console.error(`Error fetching commit for email ${email}:`, error)
-                        emailCache.set(email, null)
-                      }
-                    }
-                  })
-                )
-              })
-            )
-
-            // Gather unique contributors.
-            const contributors = new Set()
-            context.commitGroups.forEach(group => {
-              group.commits.forEach(commit => {
-                if (commit.author) {
-                  contributors.add(commit.author)
-                }
-              })
-            })
-            console.log("Contributors found:", Array.from(contributors))
-
-            // Append the contributors section.
-            const contributorSection = { title: "🤝 Contributors", commits: [] }
-            contributors.forEach(contributor => {
-              contributorSection.commits.push({ subject: contributor, hash: "" })
-            })
-            context.commitGroups.push(contributorSection)
-
-            console.log("Final context:", JSON.stringify(context, null, 2))
-            return context
-          }
+          finalizeContext
         }
       }
     ],
@@ -176,7 +202,9 @@ const config = {
     ],
     [
       "@semantic-release/npm",
-      { pkgRoot: "./packages/payload-auth" }
+      {
+        pkgRoot: "./packages/payload-auth"
+      }
     ]
   ]
 }
