@@ -50,45 +50,79 @@ const config = {
             "*{{#if scope}} **{{scope}}:**{{/if}} {{subject}} {{#if hash}} · {{hash}}{{/if}}\n\n" +
             "{{#if references}}, closes{{#each references}} [{{this.issue}}]({{this.issueUrl}}){{/each}}{{/if}}\n\n",
           groupBy: "type",
-          finalizeContext: function (context) {
+          finalizeContext: async function (context) {
             if (!context.commitGroups) return context
 
             console.log("Before transformation:", JSON.stringify(context, null, 2))
             console.log("Commit groups:", JSON.stringify(context.commitGroups, null, 2))
 
-            // Update commit group titles and format commit authors.
+            // Update commit group titles based on raw commit type.
             context.commitGroups.forEach(group => {
-              console.log("Group:", group?.commits)
-              if (group.commits && group.commits.length > 0 && group.commits[0].type) {
-                const commitType = group.commits[0].type.toLowerCase()
-                if (typeMapping[commitType]) {
-                  group.title = typeMapping[commitType]
+              if (group.commits && group.commits.length > 0) {
+                const rawType =
+                  group.commits[0].raw && group.commits[0].raw.type
+                    ? group.commits[0].raw.type.toLowerCase()
+                    : group.commits[0].type.toLowerCase()
+                if (typeMapping[rawType]) {
+                  group.title = typeMapping[rawType]
                 }
               }
-              group.commits.forEach(commit => {
-                if (!commit.author) return
-                if (typeof commit.author === "object") {
-                  // Use the GitHub login if provided.
-                  if (commit.author.login) {
-                    commit.author = `${commit.author.name} (@${commit.author.login})`
-                  } else {
-                    commit.author = commit.author.name || commit.author.email || ""
-                  }
-                }
-              })
             })
+
+            // Enrich commit author data using GitHub API.
+            const { host, owner, repository } = context
+            const headers = { "Accept": "application/vnd.github.v3+json" }
+            if (process.env.GITHUB_TOKEN) {
+              headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`
+            }
+
+            const commitCache = new Map()
+            await Promise.all(
+              context.commitGroups.map(async group => {
+                await Promise.all(
+                  group.commits.map(async commit => {
+                    if (!commit.author || !commit.raw || !commit.raw.hash) return
+                    // Only fetch if author is a plain string not already enriched.
+                    if (typeof commit.author === "string" && !commit.author.includes("(@")) {
+                      const hash = commit.raw.hash
+                      if (commitCache.has(hash)) {
+                        const login = commitCache.get(hash)
+                        if (login) commit.author = `${commit.author} (@${login})`
+                      } else {
+                        try {
+                          const res = await fetch(
+                            `${host}/repos/${owner}/${repository}/commits/${hash}`,
+                            { headers }
+                          )
+                          if (res.ok) {
+                            const data = await res.json()
+                            const login = data.author && data.author.login ? data.author.login : null
+                            commitCache.set(hash, login)
+                            if (login) commit.author = `${commit.author} (@${login})`
+                          } else {
+                            commitCache.set(hash, null)
+                          }
+                        } catch (error) {
+                          console.error(`Error fetching commit ${hash}:`, error)
+                          commitCache.set(hash, null)
+                        }
+                      }
+                    }
+                  })
+                )
+              })
+            )
 
             // Gather unique contributors.
             const contributors = new Set()
             context.commitGroups.forEach(group => {
               group.commits.forEach(commit => {
-                if (!commit.author) return
-                contributors.add(commit.author)
+                if (commit.author) contributors.add(commit.author)
               })
             })
             console.log("Contributors found:", Array.from(contributors))
 
-            // Create and add the contributors section.
+            // Append the contributors section.
             const contributorSection = { title: "🤝 Contributors", commits: [] }
             contributors.forEach(contributor => {
               contributorSection.commits.push({ subject: contributor, hash: "" })
@@ -104,9 +138,7 @@ const config = {
     [
       "@semantic-release/github",
       {
-        assets: [
-          { path: "payload-auth-distribution.zip", label: "Distribution (zip)" }
-        ],
+        assets: [{ path: "payload-auth-distribution.zip", label: "Distribution (zip)" }],
         addReleases: "bottom",
         successComment: ":tada: This release is now available as `${nextRelease.version}` :tada:",
         failTitle: "The release workflow has failed",
@@ -121,8 +153,7 @@ const config = {
       "@semantic-release/git",
       {
         assets: ["package.json"],
-        message:
-          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],
     [
