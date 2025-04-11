@@ -34,18 +34,14 @@ const config = {
           { type: "fix", release: "patch" },
           { breaking: true, release: "major" }
         ],
-        parserOpts: {
-          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
-        }
+        parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] }
       }
     ],
     [
       "@semantic-release/release-notes-generator",
       {
         preset: "angular",
-        parserOpts: {
-          noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"]
-        },
+        parserOpts: { noteKeywords: ["BREAKING CHANGE", "BREAKING CHANGES"] },
         writerOpts: {
           commitsSort: ["subject", "scope"],
           types: Object.entries(typeMapping).map(([type, section]) => ({ type, section })),
@@ -57,27 +53,32 @@ const config = {
           finalizeContext: function (context) {
             if (!context.commitGroups) return context
 
-            console.log("Before transformation:", context)
-            console.log("Commit groups:", context.commitGroups)
+            console.log("Before transformation:", JSON.stringify(context, null, 2))
+            console.log("Commit groups:", JSON.stringify(context.commitGroups, null, 2))
 
-            // Update each commit group title using the DRY typeMapping
+            // Update commit group titles and format commit authors.
             context.commitGroups.forEach(group => {
               console.log("Group:", group?.commits)
               if (group.commits && group.commits.length > 0 && group.commits[0].type) {
-                const commitType = group.commits[0].type
-                if (typeMapping[commitType]) group.title = typeMapping[commitType]
+                const commitType = group.commits[0].type.toLowerCase()
+                if (typeMapping[commitType]) {
+                  group.title = typeMapping[commitType]
+                }
               }
               group.commits.forEach(commit => {
                 if (!commit.author) return
                 if (typeof commit.author === "object") {
-                  commit.author = commit.author.login
-                    ? `${commit.author.name} (@${commit.author.login})`
-                    : commit.author.name || commit.author.email || ""
+                  // Use the GitHub login if provided.
+                  if (commit.author.login) {
+                    commit.author = `${commit.author.name} (@${commit.author.login})`
+                  } else {
+                    commit.author = commit.author.name || commit.author.email || ""
+                  }
                 }
               })
             })
 
-            // Gather unique contributors
+            // Gather unique contributors.
             const contributors = new Set()
             context.commitGroups.forEach(group => {
               group.commits.forEach(commit => {
@@ -87,7 +88,7 @@ const config = {
             })
             console.log("Contributors found:", Array.from(contributors))
 
-            // Create and add the contributors section
+            // Create and add the contributors section.
             const contributorSection = { title: "🤝 Contributors", commits: [] }
             contributors.forEach(contributor => {
               contributorSection.commits.push({ subject: contributor, hash: "" })
@@ -126,9 +127,7 @@ const config = {
     ],
     [
       "@semantic-release/npm",
-      {
-        pkgRoot: "./packages/payload-auth"
-      }
+      { pkgRoot: "./packages/payload-auth" }
     ]
   ]
 }
