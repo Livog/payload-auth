@@ -113,6 +113,7 @@ function buildContributorSection(context) {
 
 async function finalizeContext(context) {
   if (!context.commitGroups) return context
+  console.log("Context:", context)
 
   updateCommitGroupTitles(context, typeMapping)
 
