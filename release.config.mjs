@@ -62,6 +62,7 @@ const config = {
 
             // Update each commit group title using the DRY typeMapping
             context.commitGroups.forEach(group => {
+              console.log("Group:", group?.commits)
               if (group.commits && group.commits.length > 0 && group.commits[0].type) {
                 const commitType = group.commits[0].type
                 if (typeMapping[commitType]) group.title = typeMapping[commitType]
