@@ -8,11 +8,29 @@
     "build": "turbo run build --filter=./packages/payload-auth",
     "publish": "cd packages/payload-auth && pnpm publish --access public"
   },
-  "keywords": [ "payload-cms", "better-auth", "plugin", "adapter", "authentication", "monorepo", "payload-plugin" ],
+  "keywords": [
+    "payload-cms",
+    "better-auth",
+    "plugin",
+    "adapter",
+    "authentication",
+    "monorepo",
+    "payload-plugin"
+  ],
   "author": "forrestdevs <luke.gannon@me.com>",
   "license": "MIT",
-  "onlyBuiltDependencies": [ "@swc/core", "esbuild", "sharp" ],
+  "onlyBuiltDependencies": [
+    "@swc/core",
+    "esbuild",
+    "sharp"
+  ],
   "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/release-notes-generator": "^14.0.3",
+    "semantic-release": "^24.2.3",
     "turbo": "^2.5"
   },
   "packageManager": "pnpm@10.5.1"
